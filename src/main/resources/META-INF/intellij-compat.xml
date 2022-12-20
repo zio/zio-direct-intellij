@@ -1,0 +1,12 @@
+<intellij-compat>
+    <name>ZIO Direct support</name>
+    <description>This provides type inference for shapless macros</description>
+    <version>3.2.2-1</version>
+    <vendor>JetBrains</vendor>
+    <ideaVersion since-build="223" until-build="223.*">
+        <extension interface="org.jetbrains.plugins.scala.lang.macros.evaluator.ScalaMacroTypeable"
+                   implementation="jack.bar.Foo">
+            <description>Support for zio-direct whitebox macro</description>
+        </extension>
+    </ideaVersion>
+</intellij-compat>

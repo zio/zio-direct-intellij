@@ -1,0 +1,22 @@
+<idea-plugin>
+    <id>zio.direct.zio-direct-intellij</id>
+    <name>ZIO Direct support for IntelliJ</name>
+    <vendor>The ZIO Maintainers</vendor>
+    <version>replaced-by-build</version>
+
+
+    <change-notes>replaced-by-build</change-notes>
+
+    <idea-version since-build="223" until-build="223.*"/>
+
+    <depends>org.intellij.scala</depends>
+    <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+
+
+    <extensions defaultExtensionNs="com.intellij">
+
+    </extensions>
+
+</idea-plugin>
