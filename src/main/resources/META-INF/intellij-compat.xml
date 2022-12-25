@@ -5,7 +5,7 @@
     <vendor>JetBrains</vendor>
     <ideaVersion since-build="223" until-build="223.*">
         <extension interface="org.jetbrains.plugins.scala.lang.macros.evaluator.ScalaMacroTypeable"
-                   implementation="jack.bar.Foo">
+                   implementation="intellij.ZioDirectMacroSupport">
             <description>Support for zio-direct whitebox macro</description>
         </extension>
     </ideaVersion>

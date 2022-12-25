@@ -6,6 +6,8 @@ ThisBuild / intellijPluginName := "intellij-macro-stuff"
 ThisBuild / intellijBuild := "223"
 ThisBuild / jbrInfo := AutoJbr(explicitPlatform = Some(JbrPlatform.osx_aarch64))
 
+ThisBuild / organization := "dev.zio"
+
 lazy val root =
   newProject("intellij-macro-stuff", file("."))
     .enablePlugins(SbtIdeaPlugin)
