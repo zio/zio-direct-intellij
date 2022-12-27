@@ -196,7 +196,8 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
             else
               Some(ZioMod.default)
           }
-        totalMod.flatMap(_.toZio(bodyType))
+        // should we widen integer literals e.g. defer(123)
+        totalMod.flatMap(_.toZio(bodyType.widen))
       }
 
 
