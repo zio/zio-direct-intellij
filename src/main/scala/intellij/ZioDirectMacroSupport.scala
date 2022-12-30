@@ -3,17 +3,12 @@ package intellij
 import com.intellij.psi.PsiElement
 import org.jetbrains.plugins.scala.codeInspection.collections.{Qualified, invocation}
 import org.jetbrains.plugins.scala.lang.macros.evaluator.{MacroContext, MacroImpl, ScalaMacroTypeable}
-import org.jetbrains.plugins.scala.lang.psi.api.{ScalaPsiElement, ScalaRecursiveElementVisitor}
-import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScBlock, ScExpression, ScMethodCall, ScReferenceExpression}
+import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScExpression, ScMethodCall}
 import org.jetbrains.plugins.scala.lang.psi.api.statements.ScFunction
 import org.jetbrains.plugins.scala.lang.psi.impl.ScalaPsiElementFactory
-import org.jetbrains.plugins.scala.lang.psi.impl.expr.ScMethodCallImpl
-import org.jetbrains.plugins.scala.lang.psi.types.{NamedType, ScType, ScalaType}
-import org.jetbrains.plugins.scala.lang.psi.types.api.{ParameterizedType, StdTypes, ValueType}
-import org.jetbrains.plugins.scala.lang.psi.types.nonvalue.NonValueType
-import org.jetbrains.plugins.scala.lang.psi.types.result.TypeResult
-import org.jetbrains.plugins.scala.lang.psi.types.api.{Any, FunctionType, Nothing}
-
+import org.jetbrains.plugins.scala.lang.psi.types.ScType
+import org.jetbrains.plugins.scala.lang.psi.types.api.{Any, Nothing, ParameterizedType}
+import Extractors._
 
 class ZioDirectMacroSupport extends ScalaMacroTypeable {
 
@@ -30,12 +25,6 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
   }
 
   case class ZioDirectContext(unionType: UnionType, context: MacroContext)
-
-  case class RunCall private (element: PsiElement) {
-
-  }
-
-  val `.run from ZioRunOps`: Qualified = invocation("run").from(Seq("zio.direct.ZioRunOps"))
 
   class ZioMod private (val r: ScType, val e: ScType) {
     import ZioMod._
@@ -98,45 +87,38 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
 
   }
 
-  // TODO For defer in defer, assume that the outer one has run first and it's type is correct so just write
-  //      the output type of inner defers into the outer context
-  def findFirstDeferCall(element: PsiElement): Option[ScMethodCall] =
-    element match {
-      case m: ScMethodCall if (m.getInvokedExpr.getText == "defer") => Some(m)
-      case _ =>
-        element.getChildren.find(findFirstDeferCall(_).isDefined).map(_.asInstanceOf[ScMethodCall])
-    }
+  object StructureSupport {
+    // TODO For defer in defer, assume that the outer one has run first and it's type is correct so just write
+    //      the output type of inner defers into the outer context
+    private def findFirstDeferCall(element: PsiElement): Option[ScMethodCall] =
+      element match {
+        case m: ScMethodCall if (m.getInvokedExpr.getText == "defer") => Some(m)
+        case _ =>
+          element.getChildren.find(findFirstDeferCall(_).isDefined).map(_.asInstanceOf[ScMethodCall])
+      }
+
+    def firstDeferCallDetails(context: MacroContext) =
+      for {
+        firstDeferCall <- StructureSupport.findFirstDeferCall(context.place)
+        // TODO need to check invocatios of defer.info etc... and also when a withAbstractError is used to get the least upper bound for errors
+        //      if this override is specified for Scala 3
+        firstDeferCallDetails <- PsiSupport.getBodyAndBodyType(firstDeferCall)
+      } yield firstDeferCallDetails
+  }
 
   // TODO do we need to skip runs in nested defers? check that we don't go into them???
   //      need to see an example of that
-  def findRunTypes(element: PsiElement): List[TypeResult] =
+  def findRunTypes(element: PsiElement): List[Option[ScType]] =
     element match {
-      case `.run from ZioRunOps`(arg) => List(arg.`type`())
+      case `.run from ZioRunOps`(arg) =>
+        List(arg.`type`().toOption)
       case _ =>
         element.getChildren.flatMap(findRunTypes(_)).toList
     }
 
-  override def checkMacro(macros: ScFunction, context: MacroContext): Option[ScType] = {
-    //context.place.
-//    val visitor = new ScalaRecursiveElementVisitor {
-//      override def visitScalaElement(ref: ScalaPsiElement): Unit = {
-//        ref match {
-//          //case x @ RunCall(tpe) => println(s"Found expression of ${tpe} : ${x}")
-//          case x @ `.run from ZioRunOps`(method, args) =>
-//            println(x)
-//          case _ =>
-//        }
-//      }
-//    }
-//    context.place.accept(visitor)
-
-    macros.isInScala3Module
-
-
-
-    def getBodyAndBodyType(callOpt: Option[ScMethodCall]) = {
+  object PsiSupport {
+    def getBodyAndBodyType(call: ScMethodCall) = {
       for {
-        call <- callOpt
         // getFirstChild does strange things when it's it's a primitive e.g. an IntegerLiteral so not using it
         // get the defer body
         // TODO doesn't seem to be working right, need to have a closer look
@@ -149,62 +131,61 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
         tpe <- arg.`type`().toOption
       } yield (tpe, arg)
     }
+  }
 
-    // TODO need to check invocatios of defer.info etc... and also when a withAbstractError is used to get the least upper bound for errors
-    //      if this override is specified for Scala 3
-    val firstdeferCallOpt = findFirstDeferCall(context.place)
-    val firstdeferCallOptDetails = getBodyAndBodyType(firstdeferCallOpt)
+  object CommonExt {
+    implicit class ListOptionExt[T](t: List[Option[T]]) {
+      def allOrNothing: Option[List[T]] = {
+        if (t.isEmpty) None
+        else if (t.forall(_.isDefined)) Some(t.map(_.get))
+        else None
+      }
+    }
+  }
+  import CommonExt._
+
+  override def checkMacro(macros: ScFunction, context: MacroContext): Option[ScType] = {
+
+
     implicit val ctx =
       ZioDirectContext(
         if (macros.isInScala3Module) UnionType.Or else UnionType.LUB,
         context
       )
 
-    val totalType =
-      if (firstdeferCallOptDetails.isEmpty)
-        None
-      else {
-        val (bodyType, body) = firstdeferCallOptDetails.get
-
-        // TODO can check if it's scala 3 directly on the context.place, there should be a helper method for that
-        // todo need to check if any of these are None and return Any with early exit
-        val runTypesOpt = {
+    def findAndComposeRunTypes(bodyType: ScType, body: ScExpression): Option[ScType] = {
+      for {
+        runScTypes <- {
           // NOTE all of this is assuming that the environment and error parameters are associative
           // up to down (in multiple lines of code) and left to right (in the same line of code)
           // based on the flatMap-chain structure produced by zio-direct I believe this is the lawful behavior
-          findRunTypes(body).map(r => r match {
-              case Left(_) => None
-              case Right(tpe) => Some(tpe)
-            }
-          )
+          findRunTypes(body).allOrNothing
         }
+        totalModType <- {
+          val runTypesOpt = runScTypes.map(ZioMod.unapply(_))
+          runTypesOpt.reduce((a, b) => {
+            // if both are defined, compose them, the composition can also be none
+            for {
+              aVal <- a
+              bVal <- b
+              result <- aVal.compseWith(bVal)
+            } yield result
+          })
+        }
+        totalZioType <- totalModType.toZio(bodyType.widen)
+      } yield totalZioType
+    }
 
-        val totalMod =
-          if (runTypesOpt.exists(_.isEmpty)) {
-            None
-          } else {
-            val runTypesModOpt = runTypesOpt.map(_.get).map(ZioMod.unapply(_))
-            if (runTypesModOpt.nonEmpty)
-              runTypesModOpt.reduce((a, b) => {
-                // if both are defined, compose them, the composition can also be none
-                for {
-                  aVal <- a
-                  bVal <- b
-                  result <- aVal.compseWith(bVal)
-                } yield result
-              })
-            else
-              Some(ZioMod.default)
-          }
-        // should we widen integer literals e.g. defer(123)
-        totalMod.flatMap(_.toZio(bodyType.widen))
-      }
-
-
-
+    val totalType =
+      for {
+        (bodyType, body) <-
+          StructureSupport.firstDeferCallDetails(context)
+        totalZioType <-
+          findAndComposeRunTypes(bodyType, body)
+            .orElse(ZioMod.default.toZio(bodyType))
+      } yield totalZioType
 
     println(s"========== TotalType: ${totalType}")
-
     totalType
   }
 
