@@ -104,10 +104,10 @@ object Extractors {
     def unapply(expr: ScExpression): Option[ScExpression] =
       expr match {
         case `defer.apply`(v) => Some(v)
-        case `defer.tpe`(v) => Some(v)
-        case `defer.info`(v) => Some(v)
-        case `defer.verbose`(v) => Some(v)
-        case `defer.verboseTree`(v) => Some(v)
+//        case `defer.tpe`(v) => Some(v)
+//        case `defer.info`(v) => Some(v)
+//        case `defer.verbose`(v) => Some(v)
+//        case `defer.verboseTree`(v) => Some(v)
         case _ => None
       }
   }

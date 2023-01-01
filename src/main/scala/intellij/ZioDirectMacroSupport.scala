@@ -90,20 +90,25 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
   object StructureSupport {
     // TODO For defer in defer, assume that the outer one has run first and it's type is correct so just write
     //      the output type of inner defers into the outer context
-    private def findFirstDeferCall(element: PsiElement): Option[ScMethodCall] =
+    private def findFirstDeferCallBody(element: PsiElement): Option[ScExpression] =
       element match {
-        case m: ScMethodCall if (m.getInvokedExpr.getText == "defer") => Some(m)
+        // note, element should also be an instance of ScMethodCall but don't need that information here because
+        // MethodRepr in StaticMemberReferenceExtractor takes care of it
+        case `defer._`(body) =>
+          Some(body)
         case _ =>
-          element.getChildren.find(findFirstDeferCall(_).isDefined).map(_.asInstanceOf[ScMethodCall])
-      }
+          element.getChildren.view.map(findFirstDeferCallBody(_)).find(_.isDefined).flatten
+    }
 
     def firstDeferCallDetails(context: MacroContext) =
       for {
-        firstDeferCall <- StructureSupport.findFirstDeferCall(context.place)
+        deferBody <-
+          StructureSupport.findFirstDeferCallBody(context.place)
         // TODO need to check invocatios of defer.info etc... and also when a withAbstractError is used to get the least upper bound for errors
         //      if this override is specified for Scala 3
-        firstDeferCallDetails <- PsiSupport.getBodyAndBodyType(firstDeferCall)
-      } yield firstDeferCallDetails
+        deferBodyType <-
+          deferBody.`type`().toOption
+      } yield (deferBody, deferBodyType)
   }
 
   // TODO do we need to skip runs in nested defers? check that we don't go into them???
@@ -115,23 +120,6 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
       case _ =>
         element.getChildren.flatMap(findRunTypes(_)).toList
     }
-
-  object PsiSupport {
-    def getBodyAndBodyType(call: ScMethodCall) = {
-      for {
-        // getFirstChild does strange things when it's it's a primitive e.g. an IntegerLiteral so not using it
-        // get the defer body
-        // TODO doesn't seem to be working right, need to have a closer look
-        argElement <- call.args.exprs.headOption
-        arg <-
-          argElement match {
-            case expr: ScExpression => Some(expr)
-            case _ => None
-          }
-        tpe <- arg.`type`().toOption
-      } yield (tpe, arg)
-    }
-  }
 
   object CommonExt {
     implicit class ListOptionExt[T](t: List[Option[T]]) {
@@ -178,7 +166,7 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
 
     val totalType =
       for {
-        (bodyType, body) <-
+        (body, bodyType) <-
           StructureSupport.firstDeferCallDetails(context)
         totalZioType <-
           findAndComposeRunTypes(bodyType, body)
