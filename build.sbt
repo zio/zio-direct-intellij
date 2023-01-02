@@ -37,7 +37,10 @@ def newProject(projectName: String, base: File): Project =
   Project(projectName, base).settings(
     name := projectName,
     scalaVersion := scala213,
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % Test,
+    libraryDependencies ++= Seq(
+      "com.novocode" % "junit-interface" % "0.11" % Test,
+      "dev.zio" % "zio-direct_2.13" % "1.0.0-RC1+10-94125bb3+20221226-1948-SNAPSHOT" % Test
+    ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-s", "-a", "+c", "+q"),
     intellijPlugins := Seq(
       "com.intellij.java".toPlugin,
