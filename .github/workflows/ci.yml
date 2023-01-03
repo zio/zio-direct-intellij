@@ -14,21 +14,6 @@ on:
 
 jobs:
 
-  website:
-    runs-on: ubuntu-20.04
-    timeout-minutes: 60
-    steps:
-      - name: Checkout current branch
-        uses: actions/checkout@v3.1.0
-      - name: Setup Scala and Java
-        uses: actions/setup-java@v3.6.0
-        with:
-          distribution: temurin
-          java-version: 17
-          check-latest: true
-      - name: Cache scala dependencies
-        uses: coursier/cache-action@v6
-
   test:
     runs-on: ubuntu-20.04
     timeout-minutes: 30
