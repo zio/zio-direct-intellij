@@ -115,15 +115,14 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
       for {
         deferBody <-
           StructureSupport.findFirstDeferCallBody(context.place)
-        // TODO need to check invocatios of defer.info etc... and also when a withAbstractError is used to get the least upper bound for errors
-        //      if this override is specified for Scala 3
         deferBodyType <-
           deferBody.`type`().toOption
       } yield (deferBody, deferBodyType)
   }
 
-  // TODO do we need to skip runs in nested defers? check that we don't go into them???
-  //      need to see an example of that
+  // For now don't need to think about `run(run(stuff))` since that is not allowed.
+  // For run(defer(run)) cases the inner defers will be resolve before the outer ones so do not need
+  // to worry about that case either.
   def findRunTypes(element: PsiElement): List[Option[ScType]] = {
     val buff = new ArrayBuffer[Option[ScType]]()
     // use a visitor instead of manually recursing on .getChildren because the latter can lead to infinite loops
