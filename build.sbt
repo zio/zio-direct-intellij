@@ -16,17 +16,17 @@ ThisBuild / version := {
 
 
 def versionFmt(out: sbtdynver.GitDescribeOutput): String = {
-//  val dirtySuffix = out.dirtySuffix.dropPlus.mkString("-", "")
+  val dirtySuffix = out.dirtySuffix.dropPlus.mkString("-", "")
 //  println(s"--- Dirty Suffix: ${dirtySuffix}")
 //  println(s"--- OutputRef: ${out.ref} - OutputRef No Prefix: ${out.ref.dropPrefix}")
-  if (out.isCleanAfterTag) {
-    println("---- Clean After Tag! ----")
+  if (out.isCleanAfterTag && dirtySuffix == "") {
+    println("---- Clean After Tag and no Dirty Suffix ----")
     val v = out.ref.dropPrefix
     println(s"---- DynaVersion: ${v} ----")
     v
   }
   else {
-    println("---- NOT Clean After Tag! ----")
+    println(s"---- Clean After Tag: ${out.isCleanAfterTag}, DirtySuffix: '${dirtySuffix}' ----")
     val noPrefixVersion = out.ref.dropPrefix
     val v =
       if (noPrefixVersion.endsWith("-SNAPSHOT"))
