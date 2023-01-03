@@ -14,7 +14,7 @@ ThisBuild / version := {
   }
 }
 
-
+//foo
 def versionFmt(out: sbtdynver.GitDescribeOutput): String = {
   val dirtySuffix = out.dirtySuffix.dropPlus.mkString("-", "")
 //  println(s"--- Dirty Suffix: ${dirtySuffix}")
