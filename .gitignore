@@ -4,8 +4,8 @@ nohup.out
 MyExample*.scala
 MyTest*.scala
 
-# Version file to point to a particular scala version, useful for working with metals
-.zd.scala.version
+
+.zdi.version.override
 
 # Dropbox settings and caches
 .dropbox

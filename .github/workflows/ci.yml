@@ -1,27 +1,82 @@
 name: CI
 
+env:
+  JDK_JAVA_OPTIONS: -XX:+PrintCommandLineFlags # JDK_JAVA_OPTIONS is _the_ env. variable to use for modern Java
+  JVM_OPTS: -XX:+PrintCommandLineFlags # for Java 8 only (sadly, it is not modern enough for JDK_JAVA_OPTIONS)
+
 on:
-  push:
-    branches:
-      - master
   pull_request:
+  push:
+    branches: ['master']
+  release:
+    types:
+      - published
 
 jobs:
-  check:
+
+  website:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v3.1.0
+      - name: Setup Scala and Java
+        uses: actions/setup-java@v3.6.0
+        with:
+          distribution: temurin
+          java-version: 17
+          check-latest: true
+      - name: Cache scala dependencies
+        uses: coursier/cache-action@v6
+
+  test:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
-    runs-on: ${{ matrix.os }}
+        java: ['openjdk@1.17.0']
+        scala: ['2.13.10']
+        platform: ['JVM']
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Set up Scala
-        uses: olafurpg/setup-scala@v13
+      - name: Checkout current branch
+        uses: actions/checkout@v2.4.0
         with:
-          java-version: "openjdk@1.17.0"
-
+          fetch-depth: 0
+      - name: Setup Scala and Java
+        uses: olafurpg/setup-scala@v10
+        with:
+          java-version: ${{ matrix.java }}
+      - name: Cache scala dependencies
+        uses: coursier/cache-action@v6
       - name: Run tests
         run: sbt compile
-        shell: bash
+
+  ci:
+    runs-on: ubuntu-20.04
+    needs: [test]
+    steps:
+      - name: Aggregate of builds
+        run: echo "ci passed"
+
+  publish:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 30
+    needs: [ci]
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v2.4.0
+        with:
+          fetch-depth: 0
+      - name: Setup Scala and Java
+        uses: olafurpg/setup-scala@v10
+      - name: Cache scala dependencies
+        uses: coursier/cache-action@v6
+      - name: Release artifacts
+        run: sbt ci-release
+        env:
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}

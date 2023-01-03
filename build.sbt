@@ -7,7 +7,12 @@ ThisBuild / intellijPluginName := "zio-direct-intellij"
 ThisBuild / intellijBuild := "223"
 ThisBuild / jbrInfo := AutoJbr(explicitPlatform = Some(JbrPlatform.osx_aarch64))
 ThisBuild / organization := "dev.zio"
-ThisBuild / version := "1.0.0-RC2-SNAPSHOT"
+ThisBuild / version := {
+  `.zdi.version.override` match {
+      case Some(v) => v
+      case None => (ThisBuild / version).value
+  }
+}
 
 addCommandAlias("deploy", "deleteCache; publishLocal")
 
@@ -44,3 +49,39 @@ def newProject(projectName: String, base: File): Project =
     ),
     (Test / scalacOptions) += "-Xmacro-settings:enable-expression-tracers"
   )
+
+
+val `.zdi.version.override` = {
+  readVersionFromSysProps().orElse(readVersionFromFile()) match {
+    case s @ Some(_) => s
+    case None =>
+      println(s"=== [VERSION] No version from sys-props or file, defaulting to project-based ===")
+      None
+  }
+}
+
+def readVersionFromSysProps() = {
+  val version = sys.props.get("zdi.version.override")
+  if (version.isDefined) {
+    println(s"=== [Project Version] Reading Version from Sys Props: ${version} ===")
+  }
+  version
+}
+
+def readVersionFromFile() = {
+  val zdPath = FileSystems.getDefault().getPath(".zdi.version.override")
+  if (Files.exists(zdPath)) {
+    val strOpt = Files.readAllLines(zdPath).toArray().headOption.map(_.toString)
+    strOpt match {
+      case Some(v) =>
+        println(s"=== [Project Version] Reading Version from .zdi.version.override file: ${v} ===")
+        Some(v)
+      case None =>
+        println("=== [VERSION] Found a .zdi.version.override file but was empty. Skipping ===")
+        None
+    }
+  } else {
+    println("=== [VERSION] Could not find a .zdi.version.override file but was empty. Skipping ===")
+    None
+  }
+}
