@@ -1,17 +1,14 @@
 package intellij
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.plugins.scala.codeInspection.collections.{Qualified, invocation}
+import intellij.Extractors._
 import org.jetbrains.plugins.scala.lang.macros.evaluator.{MacroContext, MacroImpl, ScalaMacroTypeable}
-import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScExpression, ScMethodCall, ScReferenceExpression}
+import org.jetbrains.plugins.scala.lang.psi.api.ScalaRecursiveElementVisitor
+import org.jetbrains.plugins.scala.lang.psi.api.expr.ScExpression
 import org.jetbrains.plugins.scala.lang.psi.api.statements.ScFunction
 import org.jetbrains.plugins.scala.lang.psi.impl.ScalaPsiElementFactory
 import org.jetbrains.plugins.scala.lang.psi.types.ScType
 import org.jetbrains.plugins.scala.lang.psi.types.api.{Any, Nothing, ParameterizedType}
-import Extractors._
-import org.jetbrains.plugins.scala.ScalaVersion
-import org.jetbrains.plugins.scala.lang.psi.api.{ScalaPsiElement, ScalaRecursiveElementVisitor}
-import org.jetbrains.plugins.scala.project.ScalaFeatures
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -102,8 +99,8 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
   }
 
   object StructureSupport {
-    // TODO For defer in defer, assume that the outer one has run first and it's type is correct so just write
-    //      the output type of inner defers into the outer context
+    // For defer in defer, assume that the outer one has run first and it's type is correct so just write
+    // the output type of inner defers into the outer context
     private def findFirstDeferCallBody(element: PsiElement): Option[ScExpression] =
       element match {
         // note, element should also be an instance of ScMethodCall but don't need that information here because
@@ -198,7 +195,6 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
             .orElse(ZioMod.default.toZio(bodyType))
       } yield totalZioType
 
-    println(s"========== TotalType: ${totalType}")
     totalType
   }
 
@@ -211,10 +207,4 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
       MacroImpl("verboseTree", "zio.direct.defer")
     )
   }
-
-  /*
-  MacroImpl("product", "shapeless.Generic") ::
-    MacroImpl("apply", "shapeless.LowPriorityGeneric") ::
-    Nil
-   */
 }
