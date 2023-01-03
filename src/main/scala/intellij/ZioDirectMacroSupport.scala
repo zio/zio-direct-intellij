@@ -8,6 +8,7 @@ import org.jetbrains.plugins.scala.lang.psi.api.expr.ScExpression
 import org.jetbrains.plugins.scala.lang.psi.api.statements.ScFunction
 import org.jetbrains.plugins.scala.lang.psi.impl.ScalaPsiElementFactory
 import org.jetbrains.plugins.scala.lang.psi.types.ScType
+import org.jetbrains.plugins.scala.lang.psi.types.api.designator.ScDesignatorType
 import org.jetbrains.plugins.scala.lang.psi.types.api.{Any, Nothing, ParameterizedType}
 
 import scala.collection.mutable.ArrayBuffer
@@ -51,9 +52,16 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
       new ZioMod(Any, Nothing)
     }
 
-    def unapply(scType: ScType) = {
-      // TODO do we need to do a .withImplicitConversions here?
-      val dealiased = if (scType.isAliasType)  scType.removeAliasDefinitions() else scType
+    def unapply(scTypeRaw: ScType) = {
+      // Widen any singleton types for ZIOs captured in a property
+      // e.g. if there's something like `val v = ZIO.succeed(1); "foo" + v.run`
+      // the `v.run` would be typed as v.type instead of ZIO[Any, Nothing, Int]
+      // fix this.
+      val scType = scTypeRaw.widen
+
+      val dealiased =
+        if (scType.isAliasType)  scType.removeAliasDefinitions() else scType
+
       if (dealiased.canonicalText.startsWith("_root_.zio.ZIO["))
         dealiased match {
           case par: ParameterizedType =>
