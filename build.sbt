@@ -6,8 +6,8 @@ lazy val scala213           = "2.13.10"
 ThisBuild / intellijPluginName := "zio-direct-intellij"
 ThisBuild / intellijBuild := "223"
 ThisBuild / jbrInfo := AutoJbr(explicitPlatform = Some(JbrPlatform.osx_aarch64))
-
 ThisBuild / organization := "dev.zio"
+ThisBuild / version := "1.0.0-RC2-SNAPSHOT"
 
 addCommandAlias("deploy", "deleteCache; publishLocal")
 
