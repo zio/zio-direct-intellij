@@ -3,12 +3,17 @@ package intellij
 import com.intellij.psi.PsiElement
 import org.jetbrains.plugins.scala.codeInspection.collections.{Qualified, invocation}
 import org.jetbrains.plugins.scala.lang.macros.evaluator.{MacroContext, MacroImpl, ScalaMacroTypeable}
-import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScExpression, ScMethodCall}
+import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScExpression, ScMethodCall, ScReferenceExpression}
 import org.jetbrains.plugins.scala.lang.psi.api.statements.ScFunction
 import org.jetbrains.plugins.scala.lang.psi.impl.ScalaPsiElementFactory
 import org.jetbrains.plugins.scala.lang.psi.types.ScType
 import org.jetbrains.plugins.scala.lang.psi.types.api.{Any, Nothing, ParameterizedType}
 import Extractors._
+import org.jetbrains.plugins.scala.ScalaVersion
+import org.jetbrains.plugins.scala.lang.psi.api.{ScalaPsiElement, ScalaRecursiveElementVisitor}
+import org.jetbrains.plugins.scala.project.ScalaFeatures
+
+import scala.collection.mutable.ArrayBuffer
 
 class ZioDirectMacroSupport extends ScalaMacroTypeable {
 
@@ -79,10 +84,19 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
         case UnionType.LUB =>
           Some(a.lub(b))
         case UnionType.Or =>
-          ScalaPsiElementFactory
-            .createTypeElementFromText(s"${a.canonicalText}|${b.canonicalText}", zdc.context.place, null)
-            .`type`().toOption
+          // Unfortunately IntelliJ doesn't actually support union types yet (see https://youtrack.jetbrains.com/issue/SCL-16148/support-for-union-types-syntax)
+          // so we are forced to do least-upper-bounds.
+          // TODO Probably should have a intellij warning that zio-direct should be configured to use LUB instead of Or-types in Scala3
+          Some(a.lub(b))
 
+          // val feat = ScalaFeatures.onlyByVersion(ScalaVersion.fromString("3.2.0").get)
+          // val elem = ScalaPsiElementFactory.createTypeElementFromText(s"String|Int", feat)(zdc.context.place.getProject).`type`()
+          // if (a.isNothing && b.isNothing) Some(a)
+          // else if (a.isNothing) Some(b)
+          // else if (b.isNothing) Some(a)
+          // else
+          //   ScalaPsiElementFactory.createTypeElementFromText(s"${a.canonicalText}|${b.canonicalText}", feat)(zdc.context.place.getProject)
+          //     .`type`().toOption
       }
 
   }
@@ -113,13 +127,24 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
 
   // TODO do we need to skip runs in nested defers? check that we don't go into them???
   //      need to see an example of that
-  def findRunTypes(element: PsiElement): List[Option[ScType]] =
-    element match {
-      case `.run from ZioRunOps`(arg) =>
-        List(arg.`type`().toOption)
-      case _ =>
-        element.getChildren.flatMap(findRunTypes(_)).toList
+  def findRunTypes(element: PsiElement): List[Option[ScType]] = {
+    val buff = new ArrayBuffer[Option[ScType]]()
+    // use a visitor instead of manually recursing on .getChildren because the latter can lead to infinite loops
+    val visitor = new ScalaRecursiveElementVisitor {
+      override def visitExpression(ref: ScExpression): Unit = {
+        ref match {
+          case `.run from ZioRunOps`(arg) =>
+            buff += (arg.`type`().toOption)
+          case `.run from Scala3 Extension`(arg) =>
+            buff += (arg.`type`().toOption)
+          case _ =>
+            super.visitExpression(ref)
+        }
+      }
     }
+    element.accept(visitor)
+    buff.toList
+  }
 
   object CommonExt {
     implicit class ListOptionExt[T](t: List[Option[T]]) {
@@ -177,9 +202,15 @@ class ZioDirectMacroSupport extends ScalaMacroTypeable {
     totalType
   }
 
-  override val boundMacro: Seq[MacroImpl] =
-    MacroImpl("apply", "zio.direct.defer") ::
-      Nil
+  override val boundMacro: Seq[MacroImpl] = {
+    Seq(
+      MacroImpl("apply", "zio.direct.defer"),
+      MacroImpl("tpe", "zio.direct.defer"),
+      MacroImpl("info", "zio.direct.defer"),
+      MacroImpl("verbose", "zio.direct.defer"),
+      MacroImpl("verboseTree", "zio.direct.defer")
+    )
+  }
 
   /*
   MacroImpl("product", "shapeless.Generic") ::

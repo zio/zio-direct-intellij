@@ -1,6 +1,6 @@
 package intellij
 
-import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScExpression, ScReferenceExpression}
+import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScExpression, ScMethodCall, ScReferenceExpression}
 import org.jetbrains.plugins.scala.lang.psi.api.statements.ScFunctionDefinition
 import org.jetbrains.plugins.scala.lang.psi.api.toplevel.ScNamedElement
 import org.jetbrains.plugins.scala.lang.psi.api.toplevel.typedef.{ScObject, ScTemplateDefinition, ScTrait}
@@ -12,7 +12,7 @@ import org.jetbrains.plugins.scala.codeInspection.collections.{isOfClassFrom, _}
 import scala.reflect.ClassTag
 
 object Extractors {
-  private object Internal {
+  object Internal {
     sealed abstract class BaseStaticMemberReference(refName: String) {
       protected def matchesRefName(ref: ScReferenceExpression): Boolean =
         if (ref.refName == refName) true
@@ -30,7 +30,7 @@ object Extractors {
         .flatMap(c => Option(c.qualifiedName))
         .find(ScalaNamesUtil.nameFitToPatterns(_, patterns, strict = false))
 
-    sealed abstract class MemberReferenceExtractor[+T <: ScTemplateDefinition : ClassTag] {
+    sealed abstract class StaticMemberReferenceExtractor {
       def types: Set[String]
 
       private def findOverloaded(expr: ScReferenceExpression) =
@@ -48,12 +48,25 @@ object Extractors {
           case null => findOverloaded(ref)
           case t: ScTemplateDefinition if types.contains(t.qualifiedName) => Some(t.qualifiedName)
           case f: ScFunctionDefinition =>
-            Option(f.containingClass).collect { case o: T => o.qualifiedName }.filter(types.contains)
+            // If it's an extension method an it's in a top-level package, it won't have a containingClass
+            // so need to get the qualifier of the extensionMethodOwner
+            Option(f.containingClass).collect { case o: ScObject => o.qualifiedName }.filter(types.contains)
           case _ => None
         }
     }
 
-    sealed trait StaticMemberReferenceExtractor extends MemberReferenceExtractor[ScObject]
+    sealed abstract class ExtensionMemberReferenceExtractor {
+      def types: Set[String]
+
+      def unapply(ref: ScReferenceExpression): Option[String] =
+        ref.resolve() match {
+          case f: ScFunctionDefinition if (f.isExtensionMethod) =>
+            // If it's an extension method an it's in a top-level package, it won't have a containingClass
+            // so need to get the qualifier of the extensionMethodOwner
+            f.extensionMethodOwner.flatMap(_.topLevelQualifier).filter(types.contains)
+          case _ => None
+        }
+    }
 
     object methodExtractors {
       object uncurry1 {
@@ -61,6 +74,15 @@ object Extractors {
           expr match {
             case MethodRepr(_, _, Some(ref), Seq(e)) => Some((ref, e))
             case _ => None
+          }
+      }
+      object uncurryExtension {
+        def unapply(expr: ScExpression): Option[(ScReferenceExpression, ScExpression)] =
+          expr match {
+            case MethodRepr(_, Some(arg), Some(ref), _) =>
+              Some((ref, arg))
+            case _ =>
+              None
           }
       }
     }
@@ -85,10 +107,28 @@ object Extractors {
         }
     }
 
-    final class DeferStaticMemberReference(refName: String) extends StaticMemberReference(DeferStaticMemberReferenceExtractor, refName)
+    sealed abstract class ExtensionMemberReference(extractor: ExtensionMemberReferenceExtractor, refName: String)
+      extends BaseStaticMemberReference(refName) {
 
-    object DeferStaticMemberReferenceExtractor extends StaticMemberReferenceExtractor {
+      def unapply(expr: ScExpression): Option[ScExpression] =
+        expr match {
+          case uncurryExtension(ref, first) if matchesRefName(ref) =>
+            ref match {
+              case extractor(fqn) => Some(first)
+              case _ => None
+            }
+          case _ => None
+        }
+    }
+
+    final class DeferStaticMemberReference(refName: String) extends StaticMemberReference(`zio.direct.defer.<method>`, refName)
+    final class DirectExtensionMemberReference(refName: String) extends ExtensionMemberReference(`zio.direct.<extension-method>`, refName)
+
+    object `zio.direct.defer.<method>` extends StaticMemberReferenceExtractor {
       override val types: Set[String] = Set("zio.direct.defer")
+    }
+    object `zio.direct.<extension-method>` extends ExtensionMemberReferenceExtractor {
+      override val types: Set[String] = Set("zio.direct")
     }
   }
 
@@ -104,10 +144,10 @@ object Extractors {
     def unapply(expr: ScExpression): Option[ScExpression] =
       expr match {
         case `defer.apply`(v) => Some(v)
-//        case `defer.tpe`(v) => Some(v)
-//        case `defer.info`(v) => Some(v)
-//        case `defer.verbose`(v) => Some(v)
-//        case `defer.verboseTree`(v) => Some(v)
+        case `defer.tpe`(v) => Some(v)
+        case `defer.info`(v) => Some(v)
+        case `defer.verbose`(v) => Some(v)
+        case `defer.verboseTree`(v) => Some(v)
         case _ => None
       }
   }
@@ -115,4 +155,5 @@ object Extractors {
   // TODO run call from zio.direct package for scala. Need to look into how that's represented
   // Also need to have regular 'run(block)' call
   val `.run from ZioRunOps`: Qualified = invocation("run").from(Seq("zio.direct.ZioRunOps"))
+  val `.run from Scala3 Extension` = new DirectExtensionMemberReference("run")
 }
