@@ -12,7 +12,7 @@ ThisBuild / organization := "dev.zio"
 addCommandAlias("deploy", "deleteCache; publishLocal")
 
 lazy val root =
-  newProject("intellij-macro-stuff", file("."))
+  newProject("zio-direct-intellij", file("."))
     .enablePlugins(SbtIdeaPlugin)
 
 lazy val deleteCache = taskKey[Boolean]("Delete SBT Cache, returns false if cache didn't exist")
@@ -20,8 +20,7 @@ deleteCache := {
   import scala.sys.process._
   val fs = FileSystems.getDefault
   val homeDir = sys.env.get("HOME").getOrElse { throw new RuntimeException("Could not find home dir") }
-  val cacheFile = fs.getPath(homeDir, ".ivy2", "cache", "dev.zio", "intellij-macro-stuff_2.13")
-  //val deleted = Files.deleteIfExists(cacheFile)
+  val cacheFile = fs.getPath(homeDir, ".ivy2", "cache", "dev.zio", "zio-direct-intellij_2.13")
   val exists = Files.exists(cacheFile)
   if (exists) {
     val command = s"rm -rf ${cacheFile}"
