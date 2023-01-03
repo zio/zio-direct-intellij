@@ -16,26 +16,30 @@ ThisBuild / version := {
 
 
 def versionFmt(out: sbtdynver.GitDescribeOutput): String = {
-  val dirtySuffix = out.dirtySuffix.dropPlus.mkString("-", "")
-  println(s"--- Dirty Suffix: ${dirtySuffix}")
-  println(s"--- OutputRef: ${out.ref} - OutputRef No Prefix: ${out.ref.dropPrefix}")
+//  val dirtySuffix = out.dirtySuffix.dropPlus.mkString("-", "")
+//  println(s"--- Dirty Suffix: ${dirtySuffix}")
+//  println(s"--- OutputRef: ${out.ref} - OutputRef No Prefix: ${out.ref.dropPrefix}")
   if (out.isCleanAfterTag) {
     println("---- Clean After Tag! ----")
-    val v = out.ref.dropPrefix + dirtySuffix // no commit info if clean after tag
+    val v = out.ref.dropPrefix
     println(s"---- DynaVersion: ${v} ----")
     v
   }
   else {
     println("---- NOT Clean After Tag! ----")
-    println(s"--- CommitSuffix: '${out.commitSuffix.mkString("-", "-", "")}'")
-    val v = out.ref.dropPrefix + out.commitSuffix.mkString("-", "-", "") + dirtySuffix
-    println(s"---- DynaVersion: ${v} ----")
+    val noPrefixVersion = out.ref.dropPrefix
+    val v =
+      if (noPrefixVersion.endsWith("-SNAPSHOT"))
+        noPrefixVersion
+      else
+        s"${noPrefixVersion}-SNAPSHOT"
     v
   }
 }
 
 def fallbackVersion(d: java.util.Date): String = s"HEAD-${sbtdynver.DynVer timestamp d}"
 
+// foo
 inThisBuild(List(
   version := {
     val v = dynverGitDescribeOutput.value.mkVersion(versionFmt, fallbackVersion(dynverCurrentDate.value))
