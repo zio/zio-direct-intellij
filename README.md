@@ -3,7 +3,7 @@
 This Library Extension plugin provides type inference for ZIO-Direct `defer` blocks in IntelliJ IDEA.
 
 #### Before:
-![image](https://user-images.githubusercontent.com/1369480/210482462-2068dad2-8e24-4d06-a707-39758bb7b19c.png)
+![image](https://user-images.githubusercontent.com/1369480/210482462-2068dad2-8e24-4d06-a707-39758bb7b19c.png){width=250px}
 
 #### After:
 ![image](https://user-images.githubusercontent.com/1369480/210482482-db65e47b-c0a2-46b4-9ab1-cb909fad8704.png)
