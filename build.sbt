@@ -1,6 +1,25 @@
 import org.jetbrains.sbtidea.{AutoJbr, JbrPlatform}
 import java.nio.file.{FileSystems, Files}
 
+inThisBuild(
+  List(
+    organization := "dev.zio",
+    homepage := Some(url("https://zio.dev/zio-direct-intellij")),
+    licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
+    developers := List(
+      Developer(
+        "deusaquilus",
+        "Alexander Ioffe",
+        "deusaquilus@gmail.com",
+        url("https://github.com/deusaquilus")
+      )
+    ),
+    pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
+    pgpPublicRing := file("/tmp/public.asc"),
+    pgpSecretRing := file("/tmp/secret.asc")
+  )
+)
+
 lazy val scala213           = "2.13.10"
 
 ThisBuild / intellijPluginName := "zio-direct-intellij"
