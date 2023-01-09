@@ -31,7 +31,7 @@ object TestUtils {
         val resource = TestUtils.getClass.getClassLoader.getResource("testdata")
         TEST_DATA_PATH =
           if (resource == null)
-            find("scala/scala-impl", "testdata").getAbsolutePath
+            find("src", "testdata").getAbsolutePath
           else
             new File(resource.toURI).getPath.replace(File.separatorChar, '/')
       } catch {
