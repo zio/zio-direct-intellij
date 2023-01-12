@@ -8,14 +8,19 @@ import org.jetbrains.plugins.scala.annotator.{AnnotatorHolderMock, Message, Scal
 import org.jetbrains.plugins.scala.base.{FailableTest, ScalaSdkOwner}
 import org.jetbrains.plugins.scala.extensions.PsiElementExt
 import org.jetbrains.plugins.scala.lang.psi.api.ScalaFile
+import org.jetbrains.plugins.scala.lang.psi.api.base.types.ScTypeElement
 import org.jetbrains.plugins.scala.lang.psi.api.expr.ScExpression
-import org.jetbrains.plugins.scala.lang.psi.types.TypePresentationContext
+import org.jetbrains.plugins.scala.lang.psi.impl.ScalaPsiElementFactory
+import org.jetbrains.plugins.scala.lang.psi.types.{ScType, TypePresentationContext}
 import org.jetbrains.plugins.scala.lang.psi.types.api.TypePresentation
 import org.jetbrains.plugins.scala.lang.psi.types.result._
+import org.jetbrains.plugins.scala.project.{ProjectContext, ScalaFeatures}
 import org.jetbrains.plugins.scala.util.TestUtils
 import org.jetbrains.plugins.scala.util.TestUtils.ExpectedResultFromLastComment
 import org.jetbrains.plugins.scala.util.assertions.PsiAssertions.assertNoParserErrors
 import org.junit.Assert._
+
+case class WrappingContext(prefix: String)
 
 trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner {
   import Message._
@@ -32,24 +37,31 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
 
   def configureFromFileText(fileName: String, fileText: Option[String]): ScalaFile
 
-  final protected def doTest(fileText: String): Unit = {
-    doTest(fileText, true)
+  final protected def doTest(fileText: String, expectedType: String)(implicit ctx: WrappingContext): Unit = {
+    doTest(fileText, expectedType: String, true)
   }
 
   final protected def doTest(
     fileText: String,
+    expectedType: String,
     failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail: Boolean
-  ): Unit = {
-    doTest(Some(fileText), failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail = failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail)
+  )(implicit ctx: WrappingContext): Unit = {
+    doTestInternal(
+      fileText,
+      expectedType,
+      failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail = failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail
+    )
   }
 
-  protected def doTest(
-    fileText: Option[String],
+  protected def doTestInternal(
+    fileText: String,
+    expectedTypeText: String,
     failOnParserErrorsInFile: Boolean = true,
     failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail: Boolean = true,
     fileName: String = "dummy.scala"
-  ): Unit = {
-    val scalaFile: ScalaFile = configureFromFileText(fileName, fileText)
+  )(implicit ctx: WrappingContext): Unit = {
+    val fullFileText = ctx.prefix + "\n" + fileText
+    val scalaFile: ScalaFile = configureFromFileText(fileName, Some(fullFileText))
     if (failOnParserErrorsInFile) {
       assertNoParserErrors(scalaFile)
     }
@@ -64,35 +76,32 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
       )
     }
 
-    val expr: ScExpression = findSelectedExpression(scalaFile)
+    val expr: ScExpression = findLastExpression(scalaFile)
     implicit val tpc: TypePresentationContext = TypePresentationContext.emptyContext
-    val typez = expr.`type`() match {
+    val exprType = expr.`type`() match {
       case Right(t) if t.isUnit => expr.getTypeIgnoreBaseType
       case x => x
     }
-    typez match {
-      case Right(ttypez) =>
-        val res = ttypez.presentableText
-        val ExpectedResultFromLastComment(_, lastLineCommentText) = TestUtils.extractExpectedResultFromLastComment(scalaFile)
-        val expectedTextForCurrentVersion = extractTextForCurrentVersion(lastLineCommentText, version)
+    val expectedType =
+      ScalaPsiElementFactory.createTypeElementFromText(
+        expectedTypeText,
+        ScalaPsiElementFactory.createElementFromText(ctx.prefix, ScalaFeatures.default)(expr.projectContext),
+        null
+      ).`type`()
 
-        if (expectedTextForCurrentVersion.startsWith(FewVariantsMarker)) {
-          val results = expectedTextForCurrentVersion.substring(FewVariantsMarker.length).trim.split('\n')
-          if (!results.contains(res))
-            assertEqualsFailable(results(0), res)
-        }
-        else expectedTextForCurrentVersion match {
-          case ExpectedPattern(expectedExpectedTypeText) =>
-            val actualExpectedTypeText = expr.expectedType().map(_.presentableText).getOrElse("<none>")
-            assertEqualsFailable(expectedExpectedTypeText, actualExpectedTypeText)
-          case SimplifiedPattern(expectedText) =>
-            assertEqualsFailable(expectedText, TypePresentation.withoutAliases(ttypez))
-          case JavaTypePattern(expectedText) =>
-            assertEqualsFailable(expectedText, expr.`type`().map(_.toPsiType.getPresentableText()).getOrElse("<none>"))
-          case _ =>
-            assertEqualsFailable(expectedTextForCurrentVersion, res)
-        }
-      case Failure(msg) if shouldPass => fail(msg)
+    val bothTypes =
+      for {
+        et <- exprType
+        xt <- expectedType
+      } yield (et, xt)
+
+    bothTypes match {
+      case Right((exprType, expectedType)) =>
+        assertEquals(expectedType.canonicalText, exprType.canonicalText)
+        //assertTrue(expectedType.typeSystem.equiv(expectedType, exprType))
+
+      case Left(failure) =>
+        fail(failure.toString())
       case _ =>
     }
   }
@@ -113,6 +122,16 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
     assert(expr != null, "Not specified expression in range to infer type.")
 
     expr
+  }
+
+  protected def findLastExpression(scalaFile: ScalaFile): ScExpression = {
+    scalaFile.getChildren.lastOption match {
+      case Some(scExpr: ScExpression) => scExpr
+      case Some(other) =>
+        fail("Invalid last child (is not an ScExpression): " + other.getText).asInstanceOf[Nothing]
+      case None =>
+        fail("=== Not specified expression in the content ===\n" + scalaFile.getText).asInstanceOf[Nothing]
+    }
   }
 
   private val VersionPrefixRegex = """^\[Scala_([\w\d_]*)\](.*)""".r

@@ -61,11 +61,12 @@ object SmartJDKLoader {
       userHome + "/Library/Java/JavaVirtualMachines", // mac style
       userHome + "/.jabba/jdk", // jabba (for github actions)
       userHome + "/.jdks", // by default IDEA downloads JDKs here
+      userHome + "/.sdkman/candidates/java"
     )
   }
 
   //NOTE: consider testing against JDK 17 by default in idea223.x
-  def getOrCreateJDK(languageLevel: LanguageLevel = LanguageLevel.JDK_11): Sdk = {
+  def getOrCreateJDK(languageLevel: LanguageLevel = LanguageLevel.JDK_17): Sdk = {
     val jdkVersion = JavaSdkVersion.fromLanguageLevel(languageLevel)
     val jdkName = jdkVersion.getDescription
 
@@ -82,6 +83,7 @@ object SmartJDKLoader {
 
   private def createNewJdk(jdkVersion: JavaSdkVersion, jdkName: String): Sdk = {
     val pathOption = SmartJDKLoader.discoverJDK(jdkVersion).map(_.getAbsolutePath)
+    println(s"======= Found Jdk Path: ${pathOption}")
     Assert.assertTrue(s"Couldn't find $jdkVersion", pathOption.isDefined)
 
     VfsRootAccess.allowRootAccess(ApplicationManager.getApplication, pathOption.get)
@@ -93,7 +95,7 @@ object SmartJDKLoader {
 
   private def discoverJre(paths: Seq[String], jdkVersion: JavaSdkVersion): Option[File] = {
     val versionMajor = jdkVersion.ordinal().toString
-    val versionStrings = Seq(s"1.$versionMajor", s"-$versionMajor", s"jdk$versionMajor")
+    val versionStrings = Seq(s"1.$versionMajor", s"-$versionMajor", s"jdk$versionMajor", s"$versionMajor.")
     val fromEnv = sys.env.get(jdkVersion.toString).orElse(sys.env.get(s"${jdkVersion}_0"))
     val fromEnv64 = sys.env.get(s"${jdkVersion}_x64").orElse(sys.env.get(s"${jdkVersion}_0_x64")) // teamcity style
     val priorityPaths = Seq(currentJava(versionMajor), fromEnv.orElse(fromEnv64).map(new File(_))).flatten
