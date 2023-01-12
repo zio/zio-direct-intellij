@@ -90,6 +90,31 @@ class ZioDirectMacroSupportTest extends TypeInferenceTestBase {
     doTest(
       s"""defer {
          |  val a = ZIO.service[ConfigA].run.value
+         |  ZIO.fail(new ErrorA).run
+         |  val bc = {
+         |    val b = ZIO.service[ConfigB].run.value
+         |    ZIO.fail(new ErrorB).run
+         |    val cc =
+         |      defer {
+         |        val c = ZIO.service[ConfigC].run.value
+         |        ZIO.fail(new ErrorC).run
+         |        c
+         |      }
+         |    b + cc.run
+         |  }
+         |  val d = ZIO.service[ConfigD].run.value
+         |  ZIO.fail(new ErrorD).run
+         |  a + d
+         |}
+         |""".stripMargin,
+      "ZIO[ConfigA with ConfigB with ConfigC with ConfigD, Exception, String]"
+    )
+  }
+
+  def testConfigAndErrorCompositionWithUnused(): Unit = {
+    doTest(
+      s"""defer {
+         |  val a = ZIO.service[ConfigA].run.value
          |  if (a != "foo") ZIO.fail(new SQLException("foo")).run
          |  val b = ZIO.service[ConfigB].run.value
          |  if (b != "bar") ZIO.fail(new IllegalArgumentException("bar")).run
@@ -101,6 +126,41 @@ class ZioDirectMacroSupportTest extends TypeInferenceTestBase {
          |}
          |""".stripMargin,
       "ZIO[ConfigA with ConfigB,Exception,String]"
+    )
+  }
+
+  def testConfigAndErrorCompositionSameLine(): Unit = {
+    doTest(
+      s"""val a = ZIO.service[ConfigA] *> ZIO.fail(new SQLException("foo")) *> ZIO.succeed("hello")
+         |val b = ZIO.service[ConfigB] *> ZIO.fail(new IllegalArgumentException("foo")) *> ZIO.succeed(123)
+         |defer { (a.run, b.run) }
+         |""".stripMargin,
+      "ZIO[ConfigA with ConfigB,Exception,(String, Int)]"
+    )
+  }
+
+  def testConfigAndErrorCompositionAndSameLine(): Unit = {
+    doTest(
+      s"""val c = ZIO.service[ConfigC] *> ZIO.fail(new ErrorC) *> ZIO.succeed("hello")
+         |val d = ZIO.service[ConfigD] *> ZIO.fail(new ErrorD) *> ZIO.succeed(123)
+         |
+         |defer {
+         |  val a = ZIO.service[ConfigA].run.value
+         |  ZIO.fail(new ErrorA).run
+         |  val bc = {
+         |    val b = ZIO.service[ConfigB].run.value
+         |    ZIO.fail(new ErrorB).run
+         |    val cc = defer {
+         |      (c.run + b, d.run)
+         |    }
+         |    cc.run
+         |  }
+         |  val e = ZIO.service[ConfigE].run.value
+         |  ZIO.fail(new ErrorE).run
+         |  bc
+         |}
+         |""".stripMargin,
+      "ZIO[ConfigA with ConfigB with ConfigC with ConfigD with ConfigE, Exception, (String, Int)]"
     )
   }
 }
