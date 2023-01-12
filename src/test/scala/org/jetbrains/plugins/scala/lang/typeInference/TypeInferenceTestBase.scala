@@ -22,12 +22,12 @@ abstract class TypeInferenceTestBase extends ScalaLightCodeInsightFixtureTestCas
 
   override protected def sharedProjectToken = SharedTestProjectToken(this.getClass)
 
-  protected def doInjectorTest(injector: SyntheticMembersInjector): Unit = {
-    val extensionArea = ApplicationManager.getApplication.getExtensionArea
-    val extensionPoint = extensionArea.getExtensionPoint(SyntheticMembersInjector.EP_NAME)
-    extensionPoint.registerExtension(injector, getTestRootDisposable)
-    doTest()
-  }
+//  protected def doInjectorTest(injector: SyntheticMembersInjector): Unit = {
+//    val extensionArea = ApplicationManager.getApplication.getExtensionArea
+//    val extensionPoint = extensionArea.getExtensionPoint(SyntheticMembersInjector.EP_NAME)
+//    extensionPoint.registerExtension(injector, getTestRootDisposable)
+//    doTest()
+//  }
 
   override def configureFromFileText(fileName: String, fileText: Option[String]): ScalaFile = {
     val text = fileText.getOrElse {
@@ -42,8 +42,8 @@ abstract class TypeInferenceTestBase extends ScalaLightCodeInsightFixtureTestCas
   protected def addFileToProject(fileName: String, text: String): PsiFile =
     PsiFileTestUtil.addFileToProject(fileName, text, getProject)
 
-  protected def doTest(): Unit = {
-    val fileName = getTestName(false) + ".scala"
-    doTest(None, fileName = fileName)
-  }
+//  protected def doTest(): Unit = {
+//    val fileName = getTestName(false) + ".scala"
+//    doTest(None, fileName = fileName)
+//  }
 }

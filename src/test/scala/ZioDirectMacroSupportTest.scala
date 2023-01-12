@@ -44,32 +44,25 @@ class ZioDirectMacroSupportTest extends TypeInferenceTestBase {
   def testDummyExampleSuccess(): Unit = {
     doTest(
       s"""val value = "42" + 23
-         |${START}value$END
-         |//String
-         |""".stripMargin
+         |value
+         |""".stripMargin,
+      "String"
     )
   }
 
   def testDummyExampleFailure(): Unit = {
     doTest(
       s"""val value = "42" + 23
-         |${START}value$END
-         |//Short
-         |""".stripMargin
+         |value
+         |""".stripMargin,
+      "Short"
     )
   }
 
   def testMacroSupport(): Unit = {
     doTest(
-      s"""object Main {
-         |  import zio._
-         |  import zio.direct._
-         |
-         |  val value = defer(123)
-         |  ${START}value$END
-         |}
-         |//ZIO[Any, Nothing, 123]
-         |""".stripMargin
+      "defer(123)",
+      "ZIO[Any, Nothing, 123]"
     )
   }
 }
