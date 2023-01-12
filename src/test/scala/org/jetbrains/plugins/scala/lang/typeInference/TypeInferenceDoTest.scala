@@ -20,6 +20,8 @@ import org.jetbrains.plugins.scala.util.TestUtils.ExpectedResultFromLastComment
 import org.jetbrains.plugins.scala.util.assertions.PsiAssertions.assertNoParserErrors
 import org.junit.Assert._
 
+case class WrappingContext(prefix: String)
+
 trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner {
   import Message._
 
@@ -35,7 +37,7 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
 
   def configureFromFileText(fileName: String, fileText: Option[String]): ScalaFile
 
-  final protected def doTest(fileText: String, expectedType: String): Unit = {
+  final protected def doTest(fileText: String, expectedType: String)(implicit ctx: WrappingContext): Unit = {
     doTest(fileText, expectedType: String, true)
   }
 
@@ -43,7 +45,7 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
     fileText: String,
     expectedType: String,
     failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail: Boolean
-  ): Unit = {
+  )(implicit ctx: WrappingContext): Unit = {
     doTestInternal(
       fileText,
       expectedType,
@@ -53,17 +55,12 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
 
   protected def doTestInternal(
     fileText: String,
-    expectedType: String,
+    expectedTypeText: String,
     failOnParserErrorsInFile: Boolean = true,
     failIfNoAnnotatorErrorsInFileIfTestIsSupposedToFail: Boolean = true,
     fileName: String = "dummy.scala"
-  ): Unit = {
-    val fullFileText =
-     s"""|import zio._
-         |import zio.direct._
-         |
-         |${fileText}
-         |""".stripMargin
+  )(implicit ctx: WrappingContext): Unit = {
+    val fullFileText = ctx.prefix + "\n" + fileText
     val scalaFile: ScalaFile = configureFromFileText(fileName, Some(fullFileText))
     if (failOnParserErrorsInFile) {
       assertNoParserErrors(scalaFile)
@@ -81,33 +78,30 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
 
     val expr: ScExpression = findLastExpression(scalaFile)
     implicit val tpc: TypePresentationContext = TypePresentationContext.emptyContext
-    val typez = expr.`type`() match {
+    val exprType = expr.`type`() match {
       case Right(t) if t.isUnit => expr.getTypeIgnoreBaseType
       case x => x
     }
-    typez match {
-      case Right(ttypez) =>
-        val res = ttypez.presentableText
-        //val ExpectedResultFromLastComment(_, lastLineCommentText) = TestUtils.extractExpectedResultFromLastComment(scalaFile)
-        val expectedTextForCurrentVersion = extractTextForCurrentVersion(expectedType, version)
+    val expectedType =
+      ScalaPsiElementFactory.createTypeElementFromText(
+        expectedTypeText,
+        ScalaPsiElementFactory.createElementFromText(ctx.prefix, ScalaFeatures.default)(expr.projectContext),
+        null
+      ).`type`()
 
-        if (expectedTextForCurrentVersion.startsWith(FewVariantsMarker)) {
-          val results = expectedTextForCurrentVersion.substring(FewVariantsMarker.length).trim.split('\n')
-          if (!results.contains(res))
-            assertEqualsFailable(results(0), res)
-        }
-        else expectedTextForCurrentVersion match {
-          case ExpectedPattern(expectedExpectedTypeText) =>
-            val actualExpectedTypeText = expr.expectedType().map(_.presentableText).getOrElse("<none>")
-            assertEqualsFailable(expectedExpectedTypeText, actualExpectedTypeText)
-          case SimplifiedPattern(expectedText) =>
-            assertEqualsFailable(expectedText, TypePresentation.withoutAliases(ttypez))
-          case JavaTypePattern(expectedText) =>
-            assertEqualsFailable(expectedText, expr.`type`().map(_.toPsiType.getPresentableText()).getOrElse("<none>"))
-          case _ =>
-            assertEqualsFailable(expectedTextForCurrentVersion, res)
-        }
-      case Failure(msg) if shouldPass => fail(msg)
+    val bothTypes =
+      for {
+        et <- exprType
+        xt <- expectedType
+      } yield (et, xt)
+
+    bothTypes match {
+      case Right((exprType, expectedType)) =>
+        assertEquals(expectedType.canonicalText, exprType.canonicalText)
+        //assertTrue(expectedType.typeSystem.equiv(expectedType, exprType))
+
+      case Left(failure) =>
+        fail(failure.toString())
       case _ =>
     }
   }
@@ -131,35 +125,13 @@ trait TypeInferenceDoTest extends TestCase with FailableTest with ScalaSdkOwner 
   }
 
   protected def findLastExpression(scalaFile: ScalaFile): ScExpression = {
-//    val fileText = scalaFile.getText
-//
-//    val startMarkerOffset = fileText.indexOf(START)
-//    val startOffset = startMarkerOffset + START.length
-//    assert(startMarkerOffset != -1, "Not specified start marker in test case. Use /*start*/ in scala file for this.")
-//
-//    val endOffset = fileText.indexOf(END)
-//    assert(endOffset != -1, "Not specified end marker in test case. Use /*end*/ in scala file for this.")
-//
-//
-//
-//    val elementAtOffset = PsiTreeUtil.getParentOfType(scalaFile.findElementAt(startOffset), classOf[ScExpression])
-//    val addOne = if (elementAtOffset != null) 0 else 1 //for xml tests
-//    val expr: ScExpression = PsiTreeUtil.findElementOfClassAtRange(scalaFile, startOffset + addOne, endOffset, classOf[ScExpression])
-
-    val expr =
-      scalaFile.getChildren.lastOption match {
-        case Some(scExpr: ScExpression) => scExpr
-        case Some(other) =>
-          fail("Invalid last child (is not an ScExpression): " + other.getText).asInstanceOf[Nothing]
-        case None =>
-          fail("=== Not specified expression in the content ===\n" + scalaFile.getText).asInstanceOf[Nothing]
-      }
-
-    expr
-  }
-
-  protected def parseExpressionFromType(expectedType: String)(implicit pc: ProjectContext): ScTypeElement = {
-    ScalaPsiElementFactory.createTypeElementFromText(expectedType, ScalaFeatures.default)
+    scalaFile.getChildren.lastOption match {
+      case Some(scExpr: ScExpression) => scExpr
+      case Some(other) =>
+        fail("Invalid last child (is not an ScExpression): " + other.getText).asInstanceOf[Nothing]
+      case None =>
+        fail("=== Not specified expression in the content ===\n" + scalaFile.getText).asInstanceOf[Nothing]
+    }
   }
 
   private val VersionPrefixRegex = """^\[Scala_([\w\d_]*)\](.*)""".r

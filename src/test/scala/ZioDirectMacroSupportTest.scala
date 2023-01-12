@@ -3,7 +3,7 @@ import org.jetbrains.plugins.scala.ScalaVersion
 import org.jetbrains.plugins.scala.base.libraryLoaders.{IvyManagedLoader, LibraryLoader}
 import org.jetbrains.plugins.scala.components.libextensions.LibraryExtensionsManager
 import org.jetbrains.plugins.scala.lang.macros.evaluator.ScalaMacroTypeable
-import org.jetbrains.plugins.scala.lang.typeInference.TypeInferenceTestBase
+import org.jetbrains.plugins.scala.lang.typeInference.{TypeInferenceTestBase, WrappingContext}
 import org.junit.Assert.assertTrue
 
 import java.io.File
@@ -41,28 +41,66 @@ class ZioDirectMacroSupportTest extends TypeInferenceTestBase {
     }
   }
 
-  def testDummyExampleSuccess(): Unit = {
+  implicit val wrappingContext = WrappingContext(
+    """|import zio._
+       |import zio.direct._
+       |import java.sql.SQLException
+       |
+       |case class ConfigA(value: String)
+       |case class ConfigB(value: String)
+       |case class ConfigC(value: String)
+       |case class ConfigD(value: String)
+       |case class ConfigE(value: String)
+       |
+       |class ErrorA extends Exception("A")
+       |class ErrorB extends Exception("B")
+       |class ErrorC extends Exception("C")
+       |class ErrorD extends Exception("D")
+       |class ErrorE extends Exception("E")
+       |
+       |""".stripMargin
+  )
+
+  def testServiceWithAttempt(): Unit = {
     doTest(
-      s"""val value = "42" + 23
-         |value
+      s"""defer {
+         |  val a = ZIO.service[ConfigA].run.value
+         |  val b = ZIO.attempt("foo").run
+         |  a
+         |}
          |""".stripMargin,
-      "String"
+      "ZIO[ConfigA,Throwable,String]"
     )
   }
 
-  def testDummyExampleFailure(): Unit = {
-    doTest(
-      s"""val value = "42" + 23
-         |value
-         |""".stripMargin,
-      "Short"
-    )
+  def test_defer_info(): Unit = {
+    doTest("""defer.info { val a = ZIO.service[ConfigA].run.value; a }""", "ZIO[ConfigA, Nothing, String")
+  }
+  def test_defer_tpe(): Unit = {
+    doTest("""defer.tpe { val a = ZIO.service[ConfigA].run.value; a }""", "ZIO[ConfigA, Nothing, String")
+  }
+  def test_defer_verbose(): Unit = {
+    doTest("""defer.verbose { val a = ZIO.service[ConfigA].run.value; a }""", "ZIO[ConfigA, Nothing, String")
+  }
+  def test_defer_verboseTree(): Unit = {
+    doTest("""defer.verboseTree { val a = ZIO.service[ConfigA].run.value; a }""", "ZIO[ConfigA, Nothing, String")
   }
 
-  def testMacroSupport(): Unit = {
+  def testConfigAndErrorComposition(): Unit = {
     doTest(
-      "defer(123)",
-      "ZIO[Any, Nothing, 123]"
+      s"""defer {
+         |  val a = ZIO.service[ConfigA].run.value
+         |  if (a != "foo") ZIO.fail(new SQLException("foo")).run
+         |  val b = ZIO.service[ConfigB].run.value
+         |  if (b != "bar") ZIO.fail(new IllegalArgumentException("bar")).run
+         |  val c = {
+         |    val z = defer(123)
+         |    z
+         |  }
+         |  a + "bar"
+         |}
+         |""".stripMargin,
+      "ZIO[ConfigA with ConfigB,Exception,String]"
     )
   }
 }
