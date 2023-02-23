@@ -16,22 +16,25 @@ inThisBuild(
     ),
     pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
     pgpPublicRing := file("/tmp/public.asc"),
-    pgpSecretRing := file("/tmp/secret.asc")
-  )
+    pgpSecretRing := file("/tmp/secret.asc"),
+
+    intellijPluginName := "zio-direct-intellij",
+    intellijBuild := "223",
+    jbrInfo := AutoJbr(explicitPlatform = Some(JbrPlatform.osx_aarch64)),
+    organization := "dev.zio"
+  ) ++ {
+    `.zdi.version.override` match {
+        case Some(v) =>
+          List(version := v)
+        case None =>
+          List()
+    }
+  }
 )
 
 lazy val scala213           = "2.13.10"
 
-ThisBuild / intellijPluginName := "zio-direct-intellij"
-ThisBuild / intellijBuild := "223"
-ThisBuild / jbrInfo := AutoJbr(explicitPlatform = Some(JbrPlatform.osx_aarch64))
-ThisBuild / organization := "dev.zio"
-ThisBuild / version := {
-  `.zdi.version.override` match {
-      case Some(v) => v
-      case None => (ThisBuild / version).value
-  }
-}
+
 
 addCommandAlias("deploy", "deleteCache; publishLocal")
 
